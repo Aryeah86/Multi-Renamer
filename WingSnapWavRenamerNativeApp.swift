@@ -17,30 +17,26 @@ final class RenamerViewModel: ObservableObject {
     @Published var showAlert = false
 
     private var currentTask: Task<Void, Never>?
+    private let folderPanel = NSOpenPanel()
+    private let snapPanel = NSOpenPanel()
+
+    init() {
+        configureBasePanel(folderPanel)
+        configureBasePanel(snapPanel)
+    }
 
     func chooseMultitrackFolder() {
-        let panel = makeOpenPanel(
-            canChooseFiles: false,
-            canChooseDirectories: true,
-            prompt: "Choose Folder",
-            startingPath: multitrackFolderPath
-        )
-        present(panel: panel) { [weak self] url in
+        configureFolderPanel()
+        folderPanel.directoryURL = preferredDirectoryURL(for: multitrackFolderPath)
+        present(panel: folderPanel) { [weak self] url in
             self?.multitrackFolderPath = url.path
         }
     }
 
     func chooseSnapFile() {
-        let panel = makeOpenPanel(
-            canChooseFiles: true,
-            canChooseDirectories: false,
-            prompt: "Choose Snap",
-            startingPath: snapFilePath.isEmpty ? multitrackFolderPath : snapFilePath
-        )
-        if #available(macOS 12.0, *) {
-            panel.allowedContentTypes = [UTType(filenameExtension: "snap") ?? .json, .json]
-        }
-        present(panel: panel) { [weak self] url in
+        configureSnapPanel()
+        snapPanel.directoryURL = preferredDirectoryURL(for: snapFilePath.isEmpty ? multitrackFolderPath : snapFilePath)
+        present(panel: snapPanel) { [weak self] url in
             self?.snapFilePath = url.path
         }
     }
@@ -147,32 +143,46 @@ final class RenamerViewModel: ObservableObject {
         showAlert = true
     }
 
-    private func makeOpenPanel(
-        canChooseFiles: Bool,
-        canChooseDirectories: Bool,
-        prompt: String,
-        startingPath: String
-    ) -> NSOpenPanel {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = canChooseFiles
-        panel.canChooseDirectories = canChooseDirectories
+    private func configureBasePanel(_ panel: NSOpenPanel) {
         panel.allowsMultipleSelection = false
-        panel.prompt = prompt
-        panel.directoryURL = preferredDirectoryURL(for: startingPath)
-        return panel
+        panel.canCreateDirectories = false
+        panel.resolvesAliases = true
+        panel.treatsFilePackagesAsDirectories = false
+    }
+
+    private func configureFolderPanel() {
+        let panel = folderPanel
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.prompt = "Choose Folder"
+        if #available(macOS 12.0, *) {
+            panel.allowedContentTypes = []
+        }
+    }
+
+    private func configureSnapPanel() {
+        let panel = snapPanel
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.prompt = "Choose Snap"
+        if #available(macOS 12.0, *) {
+            panel.allowedContentTypes = [UTType(filenameExtension: "snap") ?? .json, .json]
+        }
     }
 
     private func present(panel: NSOpenPanel, completion: @escaping (URL) -> Void) {
-        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
-            panel.beginSheetModal(for: window) { response in
-                guard response == .OK, let url = panel.url else { return }
+        DispatchQueue.main.async {
+            if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+                panel.beginSheetModal(for: window) { response in
+                    guard response == .OK, let url = panel.url else { return }
+                    completion(url)
+                }
+                return
+            }
+
+            if panel.runModal() == .OK, let url = panel.url {
                 completion(url)
             }
-            return
-        }
-
-        if panel.runModal() == .OK, let url = panel.url {
-            completion(url)
         }
     }
 
@@ -234,7 +244,8 @@ struct ContentView: View {
                     telemetrySection
             }
             .padding(18)
-            .frame(width: panelWidth, height: panelHeight)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(width: panelWidth, height: panelHeight, alignment: .top)
             .background(InstrumentTheme.surface)
             .overlay(Rectangle().stroke(InstrumentTheme.outline, lineWidth: 2))
         }
@@ -492,22 +503,28 @@ struct ContentView: View {
                     }
                     .padding(.bottom, 6)
 
-                    ForEach(Array(model.rows.prefix(6))) { row in
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            tableCell(row.originalName, width: 120)
-                            tableCell("\(row.absoluteSlot)", width: 42)
-                            tableCell(row.finalName, width: nil)
-                            tableCell(row.status, width: 82, color: row.status == "OK" ? InstrumentTheme.cyan : InstrumentTheme.error)
-                        }
-                        .padding(.vertical, 4)
-                        .overlay(alignment: .bottom) {
-                            Rectangle().fill(InstrumentTheme.hairline).frame(height: 1)
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(model.rows) { row in
+                                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                    tableCell(row.originalName, width: 120)
+                                    tableCell("\(row.absoluteSlot)", width: 42)
+                                    tableCell(row.finalName, width: nil)
+                                    tableCell(row.status, width: 82, color: row.status == "OK" ? InstrumentTheme.cyan : InstrumentTheme.error)
+                                }
+                                .padding(.vertical, 4)
+                                .overlay(alignment: .bottom) {
+                                    Rectangle().fill(InstrumentTheme.hairline).frame(height: 1)
+                                }
+                            }
                         }
                     }
+                    .frame(height: 132)
                 }
                 .padding(.top, 4)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private func metric(label: String, value: String) -> some View {
