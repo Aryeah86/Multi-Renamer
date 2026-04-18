@@ -1,0 +1,95 @@
+name: Build Cross Platform App
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: electron-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: electron-app/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build Windows NSIS installer
+        run: npx electron-builder --win nsis --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wing-multitrack-renamer-windows
+          path: |
+            electron-app/release/*.exe
+            electron-app/release/*.yml
+
+  mac-artifacts:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: electron-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: electron-app/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build macOS dmg and zip
+        run: npx electron-builder --mac dmg zip --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wing-multitrack-renamer-macos
+          path: |
+            electron-app/release/*.dmg
+            electron-app/release/*.zip
+            electron-app/release/*.blockmap
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - windows-installer
+      - mac-artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wing-multitrack-renamer-windows
+          path: release-assets/windows
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wing-multitrack-renamer-macos
+          path: release-assets/macos
+
+      - name: Publish GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG_NAME="${GITHUB_REF_NAME}"
+          gh release create "$TAG_NAME" \
+            release-assets/windows/* \
+            release-assets/macos/* \
+            --title "$TAG_NAME" \
+            --generate-notes
