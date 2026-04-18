@@ -18,3 +18,10 @@ dist-native/
 # Legacy Python/Tk app packaging path
 build_macos_app.sh
 wing_snap_wav_renamer_app.py
+# Electron app
+electron-app/node_modules/
+electron-app/release/
+electron-app/.npm-cache/
+electron-app/.electron-cache/
+electron-app/.electron-builder-cache/
+dist-release/

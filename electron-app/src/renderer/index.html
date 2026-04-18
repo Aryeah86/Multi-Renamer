@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wing Multitrack Renamer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <header class="topbar">
+          <h1>Wing Multitrack Renamer</h1>
+          <p>Cross-platform renaming for WING multitrack exports</p>
+        </header>
+
+        <section class="drop-grid">
+          <button class="drop-panel" id="folderPanel" type="button">
+            <span class="eyebrow">Slot 1: Source</span>
+            <strong id="folderPrimary">Select multitrack folder</strong>
+            <span id="folderSecondary">Browse or drop the WAV folder here</span>
+          </button>
+
+          <button class="drop-panel" id="snapPanel" type="button">
+            <span class="eyebrow">Slot 2: Reference</span>
+            <strong id="snapPrimary">Select snap reference</strong>
+            <span id="snapSecondary">Browse or drop a .snap file here</span>
+          </button>
+        </section>
+
+        <section class="controls">
+          <div class="segmented" aria-label="Card selection">
+            <button class="segment active" data-card="A" type="button">CARD A<br /><small>1-32</small></button>
+            <button class="segment" data-card="B" type="button">CARD B<br /><small>33-64</small></button>
+          </div>
+
+          <div class="segmented" aria-label="Mode selection">
+            <button class="segment active" data-mode="rename" type="button">RENAME</button>
+            <button class="segment" data-mode="copy" type="button">COPY</button>
+          </div>
+        </section>
+
+        <section class="actions">
+          <button class="execute" id="executeButton" type="button">Execute Rename</button>
+        </section>
+
+        <section class="status">
+          <div class="status-row">
+            <span class="eyebrow">System Status</span>
+            <span id="statusFlag">IDLE</span>
+          </div>
+          <p id="statusText">Ready</p>
+          <progress id="progressBar" value="0" max="1"></progress>
+          <div class="metrics">
+            <div><span>Rows</span><strong id="rowsMetric">0</strong></div>
+            <div><span>Card</span><strong id="cardMetric">A</strong></div>
+            <div><span>Mode</span><strong id="modeMetric">RENAME</strong></div>
+          </div>
+          <p id="outputPath" class="output-path"></p>
+        </section>
+
+        <section class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Original</th>
+                <th>Abs</th>
+                <th>Final</th>
+                <th>State</th>
+              </tr>
+            </thead>
+            <tbody id="rowsBody">
+              <tr class="placeholder">
+                <td colspan="4">Run a rename or copy operation to preview the resulting filenames.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
