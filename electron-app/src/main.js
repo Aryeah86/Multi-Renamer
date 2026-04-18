@@ -11,6 +11,7 @@ const {
 } = require('./renamer-core');
 
 let mainWindow = null;
+const isSmokeTest = process.argv.includes('--smoke-test');
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -20,11 +21,32 @@ function createWindow() {
     minHeight: 760,
     backgroundColor: '#121212',
     title: 'Wing Multitrack Renamer',
+    show: !isSmokeTest,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    if (isSmokeTest) {
+      console.error(`Smoke test renderer load failed: ${errorCode} ${errorDescription}`);
+      app.exit(1);
+    }
+  });
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    if (isSmokeTest) {
+      setTimeout(() => app.exit(0), 400);
+    }
+  });
+
+  mainWindow.on('unresponsive', () => {
+    if (isSmokeTest) {
+      console.error('Smoke test window became unresponsive');
+      app.exit(1);
+    }
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));

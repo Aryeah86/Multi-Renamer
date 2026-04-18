@@ -3,6 +3,9 @@ name: Build Cross Platform App
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
+      - codex/windows
     tags:
       - 'v*'
 
@@ -24,10 +27,23 @@ jobs:
           cache-dependency-path: electron-app/package-lock.json
       - name: Install dependencies
         run: npm ci
+      - name: Run shared app tests
+        run: npm test
       - name: Build Windows NSIS installer
         run: npx electron-builder --win nsis --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Smoke test unpacked app launch
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD 'release\win-unpacked\Wing Multitrack Renamer.exe'
+          if (-not (Test-Path $exe)) {
+            throw "Missing unpacked executable at $exe"
+          }
+          $process = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru -Wait
+          if ($process.ExitCode -ne 0) {
+            throw "Windows app smoke test failed with exit code $($process.ExitCode)"
+          }
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -50,6 +66,8 @@ jobs:
           cache-dependency-path: electron-app/package-lock.json
       - name: Install dependencies
         run: npm ci
+      - name: Run shared app tests
+        run: npm test
       - name: Build macOS dmg and zip
         run: npx electron-builder --mac dmg zip --publish never
         env:

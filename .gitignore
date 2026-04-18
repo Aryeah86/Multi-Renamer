@@ -11,6 +11,8 @@ build/
 build-native/
 dist/
 dist-native/
+!electron-app/build/
+!electron-app/build/**
 
 # Old PyInstaller spec/build leftovers
 *.spec
