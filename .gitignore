@@ -1,0 +1,20 @@
+.DS_Store
+
+# Local Python tooling and caches
+.venv/
+.pyinstaller/
+__pycache__/
+*.pyc
+
+# Build outputs
+build/
+build-native/
+dist/
+dist-native/
+
+# Old PyInstaller spec/build leftovers
+*.spec
+
+# Legacy Python/Tk app packaging path
+build_macos_app.sh
+wing_snap_wav_renamer_app.py
