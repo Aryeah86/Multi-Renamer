@@ -34,26 +34,19 @@ jobs:
         run: |
           cmake --build windows-win32/build --config Release --parallel
 
-      - name: Create installer and portable bundle
+      - name: Create native Windows installer
         shell: pwsh
         run: |
           cpack --config windows-win32/build/CPackConfig.cmake -C Release -G NSIS
-          $exe = 'windows-win32/build/Release/WingMultitrackRenamer.exe'
           $installer = 'Wing-Multitrack-Renamer-Windows.exe'
-          if (-not (Test-Path $exe)) {
-            throw "Missing executable at $exe"
-          }
           if (-not (Test-Path $installer)) {
             throw "Missing installer at $installer"
           }
           New-Item -ItemType Directory -Force -Path native-release | Out-Null
-          Copy-Item -Force $exe 'native-release/WingMultitrackRenamer.exe'
           Copy-Item -Force $installer 'native-release/Wing-Multitrack-Renamer-Windows.exe'
 
       - name: Upload native Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: wing-multitrack-renamer-windows-native
-          path: |
-            native-release/WingMultitrackRenamer.exe
-            native-release/Wing-Multitrack-Renamer-Windows.exe
+          path: native-release/Wing-Multitrack-Renamer-Windows.exe
