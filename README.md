@@ -16,7 +16,7 @@ Simple desktop app for renaming WING multitrack WAV files from a `.snap` file.
 - Channel names:
   - `01 KICK IN.WAV`
   - `02 SNARE TOP.WAV`
-- Routed stereo outputs:
+- Routed outputs:
   - `33 DRUMS - MAIN 1 L.WAV`
   - `34 DRUMS - MAIN 1 R.WAV`
   - `41 LR - MTX 1 L.WAV`
