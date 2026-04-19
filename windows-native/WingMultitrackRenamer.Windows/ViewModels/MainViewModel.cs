@@ -4,11 +4,14 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows;
 using System.Windows.Forms;
-using Microsoft.Win32;
 using WingMultitrackRenamer.Windows.Models;
 using WingMultitrackRenamer.Windows.Services;
+using FormsDialogResult = System.Windows.Forms.DialogResult;
+using WpfApplication = System.Windows.Application;
+using WpfMessageBox = System.Windows.MessageBox;
+using WpfMessageBoxButton = System.Windows.MessageBoxButton;
+using WpfMessageBoxImage = System.Windows.MessageBoxImage;
 
 namespace WingMultitrackRenamer.Windows.ViewModels
 {
@@ -174,7 +177,7 @@ namespace WingMultitrackRenamer.Windows.ViewModels
             {
                 dialog.Description = "Choose multitrack folder";
                 dialog.SelectedPath = Directory.Exists(FolderPath) ? FolderPath : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                if (dialog.ShowDialog() == DialogResult.OK)
+                if (dialog.ShowDialog() == FormsDialogResult.OK)
                 {
                     FolderPath = dialog.SelectedPath;
                 }
@@ -183,7 +186,7 @@ namespace WingMultitrackRenamer.Windows.ViewModels
 
         private void ChooseSnap()
         {
-            var dialog = new OpenFileDialog
+            var dialog = new Microsoft.Win32.OpenFileDialog
             {
                 Filter = "Snap Files (*.snap)|*.snap|JSON Files (*.json)|*.json|All Files (*.*)|*.*",
                 CheckFileExists = true,
@@ -238,7 +241,7 @@ namespace WingMultitrackRenamer.Windows.ViewModels
                     }
                     var rows = RenamerCore.BuildPlan(wavEntries, snapRoot, card, destinationPath);
 
-                    Application.Current.Dispatcher.Invoke(() =>
+                    WpfApplication.Current.Dispatcher.Invoke(() =>
                     {
                         foreach (var row in rows)
                         {
@@ -253,7 +256,7 @@ namespace WingMultitrackRenamer.Windows.ViewModels
 
                     Action<int, int, string> progress = (completed, total, finalName) =>
                     {
-                        Application.Current.Dispatcher.Invoke(() =>
+                        WpfApplication.Current.Dispatcher.Invoke(() =>
                         {
                             ProgressMaximum = Math.Max(1, total);
                             ProgressValue = completed;
@@ -270,7 +273,7 @@ namespace WingMultitrackRenamer.Windows.ViewModels
                         RenamerCore.RenamePlan(rows, progress);
                     }
 
-                    Application.Current.Dispatcher.Invoke(() =>
+                    WpfApplication.Current.Dispatcher.Invoke(() =>
                     {
                         StatusText = mode == "copy"
                             ? string.Format("Done. Copied {0} files.", rows.Count)
@@ -292,7 +295,7 @@ namespace WingMultitrackRenamer.Windows.ViewModels
                 }
 
                 StatusText = error.Message;
-                System.Windows.MessageBox.Show(error.Message, "Wing Multitrack Renamer", MessageBoxButton.OK, MessageBoxImage.Error);
+                WpfMessageBox.Show(error.Message, "Wing Multitrack Renamer", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
             }
             finally
             {
