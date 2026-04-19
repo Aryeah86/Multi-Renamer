@@ -13,20 +13,29 @@ const {
 } = require('../src/renamer-core');
 
 const fixturesDir = path.join(__dirname, 'fixtures');
-const wavDir = path.join(fixturesDir, 'in');
 const snapPath = path.join(fixturesDir, 'test.snap');
 
 function makeTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'wing-electron-test-'));
 }
 
+function makeInputDir(indices = [1, 2, 10]) {
+  const directory = makeTempDir();
+  for (const index of indices) {
+    fs.writeFileSync(path.join(directory, `Channel-${index}.WAV`), `wav${index}`);
+  }
+  return directory;
+}
+
 test('scanWavs finds and numerically sorts Channel-N.WAV files', () => {
+  const wavDir = makeInputDir();
   const wavs = scanWavs(wavDir);
   assert.deepEqual(wavs.map((row) => row.localIndex), [1, 2, 10]);
   assert.deepEqual(wavs.map((row) => row.originalName), ['Channel-1.WAV', 'Channel-2.WAV', 'Channel-10.WAV']);
 });
 
 test('buildPlan resolves card A input names', () => {
+  const wavDir = makeInputDir();
   const wavs = scanWavs(wavDir);
   const snap = loadSnap(snapPath);
   const outDir = makeTempDir();
@@ -40,7 +49,7 @@ test('buildPlan resolves card A input names', () => {
 test('buildPlan resolves stereo MAIN lanes and unnamed patched fallback', () => {
   const snap = loadSnap(snapPath);
   const wavEntries = [1, 2, 3, 4, 5].map((index) => ({
-    sourcePath: path.join(wavDir, 'Channel-1.WAV'),
+    sourcePath: path.join(makeInputDir([1]), 'Channel-1.WAV'),
     originalName: `Channel-${index}.WAV`,
     localIndex: index,
   }));
@@ -58,7 +67,7 @@ test('buildPlan resolves stereo MAIN lanes and unnamed patched fallback', () => 
 test('copy mode creates renamed files', () => {
   const snap = loadSnap(snapPath);
   const sourceDir = makeTempDir();
-  fs.copyFileSync(path.join(wavDir, 'Channel-1.WAV'), path.join(sourceDir, 'Channel-1.WAV'));
+  fs.writeFileSync(path.join(sourceDir, 'Channel-1.WAV'), 'wav1');
   const destination = makeTimestampedOutputFolder(sourceDir, 'A');
   const rows = buildPlan({ wavEntries: scanWavs(sourceDir), snapRoot: snap, card: 'A', destinationPath: destination });
 
@@ -71,7 +80,7 @@ test('copy mode creates renamed files', () => {
 test('rename mode renames files in place', () => {
   const snap = loadSnap(snapPath);
   const sourceDir = makeTempDir();
-  fs.copyFileSync(path.join(wavDir, 'Channel-1.WAV'), path.join(sourceDir, 'Channel-1.WAV'));
+  fs.writeFileSync(path.join(sourceDir, 'Channel-1.WAV'), 'wav1');
   const rows = buildPlan({ wavEntries: scanWavs(sourceDir), snapRoot: snap, card: 'A', destinationPath: sourceDir });
 
   applyPlan({ rows, operation: 'rename', onProgress: () => {} });
