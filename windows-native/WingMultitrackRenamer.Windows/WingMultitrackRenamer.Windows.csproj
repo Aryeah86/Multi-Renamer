@@ -12,7 +12,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 </Project>

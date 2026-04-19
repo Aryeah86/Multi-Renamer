@@ -4,7 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Web.Script.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using WingMultitrackRenamer.Windows.Models;
 
 namespace WingMultitrackRenamer.Windows.Services
@@ -85,7 +86,7 @@ namespace WingMultitrackRenamer.Windows.Services
             object payload;
             try
             {
-                payload = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(snapPath));
+                payload = NormalizeJsonToken(JToken.Parse(File.ReadAllText(snapPath)));
             }
             catch (Exception error)
             {
@@ -535,6 +536,35 @@ namespace WingMultitrackRenamer.Windows.Services
         private static bool PathsEqual(string left, string right)
         {
             return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static object NormalizeJsonToken(JToken token)
+        {
+            switch (token.Type)
+            {
+                case JTokenType.Object:
+                    return token.Children<JProperty>()
+                        .ToDictionary(property => property.Name, property => NormalizeJsonToken(property.Value), StringComparer.Ordinal);
+
+                case JTokenType.Array:
+                    return token.Children().Select(NormalizeJsonToken).ToList();
+
+                case JTokenType.Integer:
+                    return token.Value<long>();
+
+                case JTokenType.Float:
+                    return token.Value<double>();
+
+                case JTokenType.Boolean:
+                    return token.Value<bool>();
+
+                case JTokenType.Null:
+                case JTokenType.Undefined:
+                    return null;
+
+                default:
+                    return token.Value<string>();
+            }
         }
 
         private sealed class Resolution
