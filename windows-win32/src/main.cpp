@@ -48,6 +48,9 @@ constexpr int IDC_OUTPUT = 1013;
 constexpr int IDC_ROWS_METRIC = 1014;
 constexpr int IDC_CARD_METRIC = 1015;
 constexpr int IDC_MODE_METRIC = 1016;
+constexpr int IDC_SOURCE_PANEL = 1017;
+constexpr int IDC_SNAP_PANEL = 1018;
+constexpr int IDC_STATUS_STATE = 1019;
 
 constexpr UINT WM_APP_PROGRESS = WM_APP + 1;
 constexpr UINT WM_APP_DONE = WM_APP + 2;
@@ -55,6 +58,15 @@ constexpr UINT WM_APP_ERROR = WM_APP + 3;
 
 const wchar_t kWindowClass[] = L"WingMultitrackRenamerWin32";
 const wchar_t kAppTitle[] = L"Wing Multitrack Renamer";
+
+constexpr COLORREF kSurfaceColor = RGB(19, 19, 19);
+constexpr COLORREF kPanelColor = RGB(14, 14, 14);
+constexpr COLORREF kOutlineColor = RGB(209, 209, 209);
+constexpr COLORREF kAmberColor = RGB(255, 176, 0);
+constexpr COLORREF kAmberTextColor = RGB(107, 71, 0);
+constexpr COLORREF kCyanColor = RGB(0, 227, 255);
+constexpr COLORREF kPrimaryTextColor = RGB(229, 227, 224);
+constexpr COLORREF kMutedTextColor = RGB(186, 171, 153);
 
 struct WavEntry {
     fs::path sourcePath;
@@ -105,15 +117,22 @@ struct ProgressPayload {
     std::wstring finalName;
 };
 
+enum class DropTarget {
+    Source,
+    Snap,
+    Auto
+};
+
 struct Controls {
-    HWND folderEdit = nullptr;
-    HWND snapEdit = nullptr;
+    HWND sourcePanel = nullptr;
+    HWND snapPanel = nullptr;
     HWND cardA = nullptr;
     HWND cardB = nullptr;
     HWND modeRename = nullptr;
     HWND modeCopy = nullptr;
     HWND execute = nullptr;
     HWND status = nullptr;
+    HWND statusState = nullptr;
     HWND progress = nullptr;
     HWND rows = nullptr;
     HWND output = nullptr;
@@ -137,6 +156,12 @@ struct AppState {
 };
 
 AppState g_state;
+HFONT g_fontMono = nullptr;
+HFONT g_fontMonoSmall = nullptr;
+HFONT g_fontMonoLarge = nullptr;
+HBRUSH g_surfaceBrush = CreateSolidBrush(kSurfaceColor);
+
+void HandleDroppedFiles(HDROP hDrop, DropTarget target);
 
 std::wstring Utf8ToWide(const std::string& text) {
     if (text.empty()) return L"";
@@ -216,6 +241,15 @@ std::wstring SanitizeName(const std::wstring& raw) {
         collapsed += token;
     }
     return collapsed;
+}
+
+std::wstring FileNameFromPath(const std::wstring& path) {
+    if (path.empty()) return L"";
+    return fs::path(path).filename().wstring();
+}
+
+std::wstring ExecuteButtonTitle() {
+    return g_state.mode == L"copy" ? L"EXECUTE COPY" : L"EXECUTE RENAME";
 }
 
 json LoadJsonFile(const fs::path& path) {
@@ -444,19 +478,20 @@ fs::path MakeTimestampedOutputFolder(const fs::path& baseFolder, wchar_t card) {
     return path;
 }
 
-void UpdateEditText(HWND hwnd, const std::wstring& text) { SetWindowTextW(hwnd, text.c_str()); }
-std::wstring ReadEditText(HWND hwnd) {
-    int length = GetWindowTextLengthW(hwnd);
-    std::wstring value(length, L'\0');
-    GetWindowTextW(hwnd, value.data(), length + 1);
-    return value;
+void SetStatus(const std::wstring& text) { SetWindowTextW(g_state.controls.status, text.c_str()); }
+
+void InvalidateIfPresent(HWND hwnd) {
+    if (hwnd) InvalidateRect(hwnd, nullptr, TRUE);
 }
 
-void SetStatus(const std::wstring& text) { SetWindowTextW(g_state.controls.status, text.c_str()); }
+void RefreshSlotPanels() {
+    InvalidateIfPresent(g_state.controls.sourcePanel);
+    InvalidateIfPresent(g_state.controls.snapPanel);
+}
 
 void RefreshMetrics() {
     SetWindowTextW(g_state.controls.rowsMetric, std::to_wstring(g_state.rows.size()).c_str());
-    std::wstring card(1, g_state.card);
+    std::wstring card = g_state.card == L'A' ? L"A 1-32" : L"B 33-64";
     SetWindowTextW(g_state.controls.cardMetric, card.c_str());
     std::wstring mode = g_state.mode;
     std::transform(mode.begin(), mode.end(), mode.begin(), towupper);
@@ -468,6 +503,11 @@ void RefreshSelectionButtons() {
     SendMessageW(g_state.controls.cardB, BM_SETCHECK, g_state.card == L'B' ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(g_state.controls.modeRename, BM_SETCHECK, g_state.mode == L"rename" ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(g_state.controls.modeCopy, BM_SETCHECK, g_state.mode == L"copy" ? BST_CHECKED : BST_UNCHECKED, 0);
+    InvalidateIfPresent(g_state.controls.cardA);
+    InvalidateIfPresent(g_state.controls.cardB);
+    InvalidateIfPresent(g_state.controls.modeRename);
+    InvalidateIfPresent(g_state.controls.modeCopy);
+    InvalidateIfPresent(g_state.controls.execute);
 }
 
 void RefreshRows() {
@@ -494,12 +534,15 @@ void RefreshRows() {
 void SetRunning(bool running) {
     g_state.isRunning = running;
     EnableWindow(g_state.controls.execute, running ? FALSE : TRUE);
-    EnableWindow(g_state.controls.folderEdit, running ? FALSE : TRUE);
-    EnableWindow(g_state.controls.snapEdit, running ? FALSE : TRUE);
+    EnableWindow(g_state.controls.sourcePanel, running ? FALSE : TRUE);
+    EnableWindow(g_state.controls.snapPanel, running ? FALSE : TRUE);
     EnableWindow(g_state.controls.cardA, running ? FALSE : TRUE);
     EnableWindow(g_state.controls.cardB, running ? FALSE : TRUE);
     EnableWindow(g_state.controls.modeRename, running ? FALSE : TRUE);
     EnableWindow(g_state.controls.modeCopy, running ? FALSE : TRUE);
+    InvalidateIfPresent(g_state.controls.sourcePanel);
+    InvalidateIfPresent(g_state.controls.snapPanel);
+    InvalidateIfPresent(g_state.controls.execute);
 }
 
 void WorkerThread(HWND hwnd, std::wstring folderPath, std::wstring snapPath, wchar_t card, std::wstring mode) {
@@ -548,8 +591,6 @@ void WorkerThread(HWND hwnd, std::wstring folderPath, std::wstring snapPath, wch
 }
 
 void StartExecution(HWND hwnd) {
-    g_state.folderPath = ReadEditText(g_state.controls.folderEdit);
-    g_state.snapPath = ReadEditText(g_state.controls.snapEdit);
     if (g_state.folderPath.empty()) { MessageBoxW(hwnd, L"Please choose a multitrack folder.", kAppTitle, MB_OK | MB_ICONERROR); return; }
     if (g_state.snapPath.empty()) { MessageBoxW(hwnd, L"Please choose a snap file.", kAppTitle, MB_OK | MB_ICONERROR); return; }
 
@@ -558,6 +599,7 @@ void StartExecution(HWND hwnd) {
     SetWindowTextW(g_state.controls.output, L"");
     SendMessageW(g_state.controls.progress, PBM_SETPOS, 0, 0);
     SendMessageW(g_state.controls.progress, PBM_SETRANGE32, 0, 1);
+    SetWindowTextW(g_state.controls.statusState, g_state.mode == L"copy" ? L"COPY" : L"RENAME");
     SetStatus(L"Building rename plan...");
     SetRunning(true);
 
@@ -593,21 +635,43 @@ std::optional<std::wstring> PickSnap(HWND hwnd) {
     return std::nullopt;
 }
 
-void HandleDroppedFiles(HDROP hDrop) {
+void ApplyDroppedPath(const fs::path& dropped, DropTarget target) {
+    const bool isDirectory = fs::is_directory(dropped);
+    const bool isSnap = PathMatchSpecW(dropped.extension().c_str(), L".snap") || PathMatchSpecW(dropped.extension().c_str(), L".json");
+
+    switch (target) {
+        case DropTarget::Source:
+            if (isDirectory) {
+                g_state.folderPath = dropped.wstring();
+                RefreshSlotPanels();
+            }
+            return;
+        case DropTarget::Snap:
+            if (isSnap) {
+                g_state.snapPath = dropped.wstring();
+                RefreshSlotPanels();
+            }
+            return;
+        case DropTarget::Auto:
+            if (isDirectory) {
+                g_state.folderPath = dropped.wstring();
+                RefreshSlotPanels();
+                return;
+            }
+            if (isSnap) {
+                g_state.snapPath = dropped.wstring();
+                RefreshSlotPanels();
+            }
+            return;
+    }
+}
+
+void HandleDroppedFiles(HDROP hDrop, DropTarget target) {
     UINT count = DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
     for (UINT i = 0; i < count; ++i) {
         wchar_t path[MAX_PATH]{};
         DragQueryFileW(hDrop, i, path, MAX_PATH);
-        fs::path dropped(path);
-        if (fs::is_directory(dropped) && g_state.folderPath.empty()) {
-            g_state.folderPath = dropped.wstring();
-            UpdateEditText(g_state.controls.folderEdit, g_state.folderPath);
-            continue;
-        }
-        if (PathMatchSpecW(dropped.extension().c_str(), L".snap") || PathMatchSpecW(dropped.extension().c_str(), L".json")) {
-            g_state.snapPath = dropped.wstring();
-            UpdateEditText(g_state.controls.snapEdit, g_state.snapPath);
-        }
+        ApplyDroppedPath(fs::path(path), target);
     }
     DragFinish(hDrop);
 }
@@ -622,6 +686,88 @@ HMENU MenuId(int id) {
     return reinterpret_cast<HMENU>(static_cast<INT_PTR>(id));
 }
 
+void DrawRectFrame(HDC dc, const RECT& rect, COLORREF fill, COLORREF border, int borderWidth = 1) {
+    HBRUSH fillBrush = CreateSolidBrush(fill);
+    FillRect(dc, &rect, fillBrush);
+    DeleteObject(fillBrush);
+
+    HPEN pen = CreatePen(PS_SOLID, borderWidth, border);
+    HPEN oldPen = reinterpret_cast<HPEN>(SelectObject(dc, pen));
+    HGDIOBJ oldBrush = SelectObject(dc, GetStockObject(HOLLOW_BRUSH));
+    Rectangle(dc, rect.left, rect.top, rect.right, rect.bottom);
+    SelectObject(dc, oldBrush);
+    SelectObject(dc, oldPen);
+    DeleteObject(pen);
+}
+
+void DrawTextBlock(HDC dc, const RECT& rect, const std::wstring& text, HFONT font, COLORREF color, UINT format) {
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, color);
+    HGDIOBJ oldFont = SelectObject(dc, font);
+    RECT mutableRect = rect;
+    DrawTextW(dc, text.c_str(), -1, &mutableRect, format);
+    SelectObject(dc, oldFont);
+}
+
+LRESULT CALLBACK DropPanelSubclassProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR refData) {
+    if (message == WM_DROPFILES) {
+        HandleDroppedFiles(reinterpret_cast<HDROP>(wParam), static_cast<DropTarget>(refData));
+        return 0;
+    }
+    return DefSubclassProc(hwnd, message, wParam, lParam);
+}
+
+void DrawSlotPanel(const DRAWITEMSTRUCT* draw, const std::wstring& title, const std::wstring& primary, const std::wstring& secondary) {
+    COLORREF fill = IsWindowEnabled(draw->hwndItem) ? kPanelColor : RGB(30, 30, 30);
+    DrawRectFrame(draw->hDC, draw->rcItem, fill, kOutlineColor);
+
+    RECT titleRect = draw->rcItem;
+    titleRect.left += 16;
+    titleRect.top += 14;
+    titleRect.right -= 16;
+    titleRect.bottom = titleRect.top + 20;
+    DrawTextBlock(draw->hDC, titleRect, title, g_fontMono, kCyanColor, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+    RECT primaryRect = draw->rcItem;
+    primaryRect.left += 24;
+    primaryRect.right -= 24;
+    primaryRect.top += 48;
+    primaryRect.bottom = primaryRect.top + 32;
+    DrawTextBlock(draw->hDC, primaryRect, primary, g_fontMonoLarge, kPrimaryTextColor, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+    RECT secondaryRect = draw->rcItem;
+    secondaryRect.left += 24;
+    secondaryRect.right -= 24;
+    secondaryRect.top += 84;
+    secondaryRect.bottom -= 16;
+    DrawTextBlock(draw->hDC, secondaryRect, secondary, g_fontMonoSmall, kMutedTextColor, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+}
+
+void DrawSegmentButton(const DRAWITEMSTRUCT* draw, const std::wstring& top, const std::wstring& bottom, bool selected) {
+    COLORREF fill = selected ? kAmberColor : kPanelColor;
+    COLORREF text = selected ? kAmberTextColor : kMutedTextColor;
+    DrawRectFrame(draw->hDC, draw->rcItem, fill, kOutlineColor);
+
+    RECT topRect = draw->rcItem;
+    topRect.top += 10;
+    topRect.bottom = topRect.top + 18;
+    DrawTextBlock(draw->hDC, topRect, top, g_fontMono, text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+    RECT bottomRect = draw->rcItem;
+    bottomRect.top += 30;
+    bottomRect.bottom = bottomRect.top + 18;
+    DrawTextBlock(draw->hDC, bottomRect, bottom, g_fontMonoSmall, text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
+
+void DrawActionButton(const DRAWITEMSTRUCT* draw, const std::wstring& title, bool enabled) {
+    COLORREF fill = enabled ? kAmberColor : RGB(54, 54, 54);
+    COLORREF text = enabled ? kAmberTextColor : kMutedTextColor;
+    DrawRectFrame(draw->hDC, draw->rcItem, fill, kOutlineColor, 2);
+
+    RECT textRect = draw->rcItem;
+    DrawTextBlock(draw->hDC, textRect, L"\x25B6  " + title, g_fontMono, text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
         case WM_CREATE: {
@@ -629,76 +775,83 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             InitCommonControlsEx(&icc);
             DragAcceptFiles(hwnd, TRUE);
 
-            HFONT font = CreateFontW(-16, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, L"Consolas");
-            HFONT titleFont = CreateFontW(-28, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, L"Consolas");
+            g_fontMono = CreateFontW(-16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, L"Consolas");
+            g_fontMonoSmall = CreateFontW(-15, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, L"Consolas");
+            g_fontMonoLarge = CreateFontW(-26, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, L"Consolas");
 
-            CreateLabel(hwnd, L"Wing Multitrack Renamer", 20, 18, 400, 32, titleFont);
+            g_state.controls.sourcePanel = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 18, 18, 560, 120, hwnd, MenuId(IDC_SOURCE_PANEL), nullptr, nullptr);
+            g_state.controls.snapPanel = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 18, 152, 560, 120, hwnd, MenuId(IDC_SNAP_PANEL), nullptr, nullptr);
 
-            CreateLabel(hwnd, L"SLOT 1: SOURCE", 20, 64, 200, 18, font);
-            g_state.controls.folderEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 20, 86, 560, 28, hwnd, MenuId(IDC_FOLDER_EDIT), nullptr, nullptr);
-            CreateWindowW(L"BUTTON", L"Browse...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 590, 86, 130, 28, hwnd, MenuId(IDC_FOLDER_BUTTON), nullptr, nullptr);
+            g_state.controls.cardA = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 182, 306, 118, 58, hwnd, MenuId(IDC_CARD_A), nullptr, nullptr);
+            g_state.controls.cardB = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 300, 306, 118, 58, hwnd, MenuId(IDC_CARD_B), nullptr, nullptr);
+            g_state.controls.modeRename = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 182, 374, 118, 46, hwnd, MenuId(IDC_MODE_RENAME), nullptr, nullptr);
+            g_state.controls.modeCopy = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 300, 374, 118, 46, hwnd, MenuId(IDC_MODE_COPY), nullptr, nullptr);
+            g_state.controls.execute = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 18, 438, 560, 56, hwnd, MenuId(IDC_EXECUTE), nullptr, nullptr);
 
-            CreateLabel(hwnd, L"SLOT 2: REFERENCE", 20, 128, 200, 18, font);
-            g_state.controls.snapEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 20, 150, 560, 28, hwnd, MenuId(IDC_SNAP_EDIT), nullptr, nullptr);
-            CreateWindowW(L"BUTTON", L"Browse...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 590, 150, 130, 28, hwnd, MenuId(IDC_SNAP_BUTTON), nullptr, nullptr);
+            CreateLabel(hwnd, L"SYSTEM STATUS", 18, 512, 180, 18, g_fontMono);
+            g_state.controls.statusState = CreateWindowW(L"STATIC", L"IDLE", WS_CHILD | WS_VISIBLE | SS_RIGHT, 458, 512, 120, 18, hwnd, MenuId(IDC_STATUS_STATE), nullptr, nullptr);
+            g_state.controls.status = CreateWindowW(L"STATIC", L"Ready", WS_CHILD | WS_VISIBLE, 18, 540, 560, 22, hwnd, MenuId(IDC_STATUS), nullptr, nullptr);
+            g_state.controls.progress = CreateWindowExW(0, PROGRESS_CLASSW, nullptr, WS_CHILD | WS_VISIBLE, 18, 578, 560, 10, hwnd, MenuId(IDC_PROGRESS), nullptr, nullptr);
+            CreateLabel(hwnd, L"ROWS", 18, 608, 60, 18, g_fontMonoSmall);
+            g_state.controls.rowsMetric = CreateWindowW(L"STATIC", L"0", WS_CHILD | WS_VISIBLE, 18, 628, 60, 20, hwnd, MenuId(IDC_ROWS_METRIC), nullptr, nullptr);
+            CreateLabel(hwnd, L"CARD", 92, 608, 60, 18, g_fontMonoSmall);
+            g_state.controls.cardMetric = CreateWindowW(L"STATIC", L"B 33-64", WS_CHILD | WS_VISIBLE, 92, 628, 90, 20, hwnd, MenuId(IDC_CARD_METRIC), nullptr, nullptr);
+            CreateLabel(hwnd, L"MODE", 200, 608, 60, 18, g_fontMonoSmall);
+            g_state.controls.modeMetric = CreateWindowW(L"STATIC", L"RENAME", WS_CHILD | WS_VISIBLE, 200, 628, 110, 20, hwnd, MenuId(IDC_MODE_METRIC), nullptr, nullptr);
+            g_state.controls.output = CreateWindowW(L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFTNOWORDWRAP, 18, 660, 560, 20, hwnd, MenuId(IDC_OUTPUT), nullptr, nullptr);
 
-            g_state.controls.cardA = CreateWindowW(L"BUTTON", L"CARD A  1-32", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 20, 200, 150, 24, hwnd, MenuId(IDC_CARD_A), nullptr, nullptr);
-            g_state.controls.cardB = CreateWindowW(L"BUTTON", L"CARD B  33-64", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 190, 200, 170, 24, hwnd, MenuId(IDC_CARD_B), nullptr, nullptr);
-            g_state.controls.modeRename = CreateWindowW(L"BUTTON", L"RENAME", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 420, 200, 130, 24, hwnd, MenuId(IDC_MODE_RENAME), nullptr, nullptr);
-            g_state.controls.modeCopy = CreateWindowW(L"BUTTON", L"COPY", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 570, 200, 100, 24, hwnd, MenuId(IDC_MODE_COPY), nullptr, nullptr);
-
-            g_state.controls.execute = CreateWindowW(L"BUTTON", L"Execute Rename", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 20, 240, 700, 38, hwnd, MenuId(IDC_EXECUTE), nullptr, nullptr);
-
-            CreateLabel(hwnd, L"SYSTEM STATUS", 20, 298, 200, 18, font);
-            g_state.controls.status = CreateWindowW(L"STATIC", L"Ready", WS_CHILD | WS_VISIBLE, 20, 322, 700, 20, hwnd, MenuId(IDC_STATUS), nullptr, nullptr);
-            g_state.controls.progress = CreateWindowExW(0, PROGRESS_CLASSW, nullptr, WS_CHILD | WS_VISIBLE, 20, 350, 700, 16, hwnd, MenuId(IDC_PROGRESS), nullptr, nullptr);
-            CreateLabel(hwnd, L"ROWS", 20, 376, 60, 18, font);
-            g_state.controls.rowsMetric = CreateWindowW(L"STATIC", L"0", WS_CHILD | WS_VISIBLE, 20, 396, 50, 20, hwnd, MenuId(IDC_ROWS_METRIC), nullptr, nullptr);
-            CreateLabel(hwnd, L"CARD", 120, 376, 60, 18, font);
-            g_state.controls.cardMetric = CreateWindowW(L"STATIC", L"A", WS_CHILD | WS_VISIBLE, 120, 396, 50, 20, hwnd, MenuId(IDC_CARD_METRIC), nullptr, nullptr);
-            CreateLabel(hwnd, L"MODE", 220, 376, 60, 18, font);
-            g_state.controls.modeMetric = CreateWindowW(L"STATIC", L"RENAME", WS_CHILD | WS_VISIBLE, 220, 396, 120, 20, hwnd, MenuId(IDC_MODE_METRIC), nullptr, nullptr);
-            g_state.controls.output = CreateWindowW(L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFTNOWORDWRAP, 20, 424, 700, 20, hwnd, MenuId(IDC_OUTPUT), nullptr, nullptr);
-
-            g_state.controls.rows = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, nullptr, WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 20, 456, 700, 220, hwnd, MenuId(IDC_ROWS), nullptr, nullptr);
+            g_state.controls.rows = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, nullptr, WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 18, 690, 560, 150, hwnd, MenuId(IDC_ROWS), nullptr, nullptr);
             ListView_SetExtendedListViewStyle(g_state.controls.rows, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
             LVCOLUMNW col{};
             col.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
-            col.pszText = const_cast<LPWSTR>(L"Original"); col.cx = 180; ListView_InsertColumn(g_state.controls.rows, 0, &col);
-            col.pszText = const_cast<LPWSTR>(L"Abs"); col.cx = 70; col.iSubItem = 1; ListView_InsertColumn(g_state.controls.rows, 1, &col);
-            col.pszText = const_cast<LPWSTR>(L"Final"); col.cx = 330; col.iSubItem = 2; ListView_InsertColumn(g_state.controls.rows, 2, &col);
-            col.pszText = const_cast<LPWSTR>(L"State"); col.cx = 90; col.iSubItem = 3; ListView_InsertColumn(g_state.controls.rows, 3, &col);
+            col.pszText = const_cast<LPWSTR>(L"Original"); col.cx = 150; ListView_InsertColumn(g_state.controls.rows, 0, &col);
+            col.pszText = const_cast<LPWSTR>(L"Abs"); col.cx = 55; col.iSubItem = 1; ListView_InsertColumn(g_state.controls.rows, 1, &col);
+            col.pszText = const_cast<LPWSTR>(L"Final"); col.cx = 255; col.iSubItem = 2; ListView_InsertColumn(g_state.controls.rows, 2, &col);
+            col.pszText = const_cast<LPWSTR>(L"State"); col.cx = 80; col.iSubItem = 3; ListView_InsertColumn(g_state.controls.rows, 3, &col);
 
-            for (HWND ctl : {g_state.controls.folderEdit, g_state.controls.snapEdit, g_state.controls.cardA, g_state.controls.cardB, g_state.controls.modeRename, g_state.controls.modeCopy, g_state.controls.execute, g_state.controls.status, g_state.controls.output, g_state.controls.rowsMetric, g_state.controls.cardMetric, g_state.controls.modeMetric, g_state.controls.rows}) {
-                SendMessageW(ctl, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+            ListView_SetBkColor(g_state.controls.rows, kPanelColor);
+            ListView_SetTextBkColor(g_state.controls.rows, kPanelColor);
+            ListView_SetTextColor(g_state.controls.rows, kPrimaryTextColor);
+            SendMessageW(g_state.controls.progress, PBM_SETBARCOLOR, 0, kCyanColor);
+            SendMessageW(g_state.controls.progress, PBM_SETBKCOLOR, 0, RGB(40, 40, 40));
+
+            for (HWND ctl : {g_state.controls.sourcePanel, g_state.controls.snapPanel, g_state.controls.cardA, g_state.controls.cardB, g_state.controls.modeRename, g_state.controls.modeCopy, g_state.controls.execute, g_state.controls.status, g_state.controls.statusState, g_state.controls.output, g_state.controls.rowsMetric, g_state.controls.cardMetric, g_state.controls.modeMetric, g_state.controls.rows}) {
+                SendMessageW(ctl, WM_SETFONT, reinterpret_cast<WPARAM>(g_fontMonoSmall), TRUE);
             }
+            SetWindowSubclass(g_state.controls.sourcePanel, DropPanelSubclassProc, 1, static_cast<DWORD_PTR>(DropTarget::Source));
+            SetWindowSubclass(g_state.controls.snapPanel, DropPanelSubclassProc, 1, static_cast<DWORD_PTR>(DropTarget::Snap));
+            DragAcceptFiles(g_state.controls.sourcePanel, TRUE);
+            DragAcceptFiles(g_state.controls.snapPanel, TRUE);
             RefreshSelectionButtons();
             RefreshMetrics();
+            RefreshSlotPanels();
             break;
         }
         case WM_COMMAND: {
             switch (LOWORD(wParam)) {
+                case IDC_SOURCE_PANEL:
                 case IDC_FOLDER_BUTTON:
-                    if (auto chosen = PickFolder(hwnd)) { g_state.folderPath = *chosen; UpdateEditText(g_state.controls.folderEdit, *chosen); }
+                    if (auto chosen = PickFolder(hwnd)) { g_state.folderPath = *chosen; RefreshSlotPanels(); }
                     break;
+                case IDC_SNAP_PANEL:
                 case IDC_SNAP_BUTTON:
-                    if (auto chosen = PickSnap(hwnd)) { g_state.snapPath = *chosen; UpdateEditText(g_state.controls.snapEdit, *chosen); }
+                    if (auto chosen = PickSnap(hwnd)) { g_state.snapPath = *chosen; RefreshSlotPanels(); }
                     break;
                 case IDC_CARD_A:
                     g_state.card = L'A'; RefreshSelectionButtons(); RefreshMetrics(); break;
                 case IDC_CARD_B:
                     g_state.card = L'B'; RefreshSelectionButtons(); RefreshMetrics(); break;
                 case IDC_MODE_RENAME:
-                    g_state.mode = L"rename"; RefreshSelectionButtons(); RefreshMetrics(); SetWindowTextW(g_state.controls.execute, L"Execute Rename"); break;
+                    g_state.mode = L"rename"; RefreshSelectionButtons(); RefreshMetrics(); break;
                 case IDC_MODE_COPY:
-                    g_state.mode = L"copy"; RefreshSelectionButtons(); RefreshMetrics(); SetWindowTextW(g_state.controls.execute, L"Execute Copy"); break;
+                    g_state.mode = L"copy"; RefreshSelectionButtons(); RefreshMetrics(); break;
                 case IDC_EXECUTE:
                     StartExecution(hwnd); break;
             }
             break;
         }
         case WM_DROPFILES:
-            HandleDroppedFiles(reinterpret_cast<HDROP>(wParam));
+            HandleDroppedFiles(reinterpret_cast<HDROP>(wParam), DropTarget::Auto);
             break;
         case WM_APP_PROGRESS: {
             std::unique_ptr<ProgressPayload> payload;
@@ -709,6 +862,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (payload) {
                 SendMessageW(g_state.controls.progress, PBM_SETRANGE32, 0, payload->total);
                 SendMessageW(g_state.controls.progress, PBM_SETPOS, payload->completed, 0);
+                SetWindowTextW(g_state.controls.statusState, g_state.mode == L"copy" ? L"COPY" : L"RENAME");
                 SetStatus((g_state.mode == L"copy" ? L"Copying " : L"Renaming ") + std::to_wstring(payload->completed) + L"/" + std::to_wstring(payload->total) + L": " + payload->finalName);
             }
             break;
@@ -723,6 +877,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 g_state.rows = std::move(result->rows);
                 RefreshRows();
                 SetWindowTextW(g_state.controls.output, result->outputPath.wstring().c_str());
+                SetWindowTextW(g_state.controls.statusState, L"DONE");
                 SetStatus(result->mode == L"copy" ? (L"Done. Copied " + std::to_wstring(g_state.rows.size()) + L" files.") : (L"Done. Renamed " + std::to_wstring(g_state.rows.size()) + L" files in place."));
             }
             SetRunning(false);
@@ -736,10 +891,60 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
             SetRunning(false);
             if (error) {
+                SetWindowTextW(g_state.controls.statusState, L"ERROR");
                 SetStatus(*error);
                 MessageBoxW(hwnd, error->c_str(), kAppTitle, MB_OK | MB_ICONERROR);
             }
             break;
+        }
+        case WM_DRAWITEM: {
+            const auto* draw = reinterpret_cast<DRAWITEMSTRUCT*>(lParam);
+            if (!draw) break;
+            switch (draw->CtlID) {
+                case IDC_SOURCE_PANEL:
+                    DrawSlotPanel(draw, L"SLOT 1: SOURCE",
+                        g_state.folderPath.empty() ? L"Select multitrack folder" : FileNameFromPath(g_state.folderPath),
+                        g_state.folderPath.empty() ? L"Browse or drop extracted WAV folder" : g_state.folderPath);
+                    return TRUE;
+                case IDC_SNAP_PANEL:
+                    DrawSlotPanel(draw, L"SLOT 2: REFERENCE",
+                        g_state.snapPath.empty() ? L"Select snap reference" : FileNameFromPath(g_state.snapPath),
+                        g_state.snapPath.empty() ? L"Browse or drop .snap file" : g_state.snapPath);
+                    return TRUE;
+                case IDC_CARD_A:
+                    DrawSegmentButton(draw, L"CARD A", L"1-32", g_state.card == L'A');
+                    return TRUE;
+                case IDC_CARD_B:
+                    DrawSegmentButton(draw, L"CARD B", L"33-64", g_state.card == L'B');
+                    return TRUE;
+                case IDC_MODE_RENAME:
+                    DrawSegmentButton(draw, L"RENAME", L"", g_state.mode == L"rename");
+                    return TRUE;
+                case IDC_MODE_COPY:
+                    DrawSegmentButton(draw, L"COPY", L"", g_state.mode == L"copy");
+                    return TRUE;
+                case IDC_EXECUTE:
+                    DrawActionButton(draw, ExecuteButtonTitle(), !g_state.isRunning);
+                    return TRUE;
+            }
+            break;
+        }
+        case WM_CTLCOLORSTATIC: {
+            HDC dc = reinterpret_cast<HDC>(wParam);
+            HWND control = reinterpret_cast<HWND>(lParam);
+            SetBkMode(dc, TRANSPARENT);
+            if (control == g_state.controls.statusState) {
+                SetTextColor(dc, g_state.isRunning ? kAmberColor : kMutedTextColor);
+            } else if (control == g_state.controls.status) {
+                SetTextColor(dc, kPrimaryTextColor);
+            } else if (control == g_state.controls.rowsMetric || control == g_state.controls.cardMetric || control == g_state.controls.modeMetric) {
+                SetTextColor(dc, kPrimaryTextColor);
+            } else if (control == g_state.controls.output) {
+                SetTextColor(dc, kMutedTextColor);
+            } else {
+                SetTextColor(dc, kCyanColor);
+            }
+            return reinterpret_cast<INT_PTR>(g_surfaceBrush);
         }
         case WM_DESTROY:
             PostQuitMessage(0);
@@ -758,11 +963,11 @@ int RunApplication(HINSTANCE instance, int showCommand) {
     wc.hInstance = instance;
     wc.lpszClassName = kWindowClass;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    wc.hbrBackground = g_surfaceBrush;
     RegisterClassW(&wc);
 
     HWND hwnd = CreateWindowExW(0, kWindowClass, kAppTitle, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 760, 740, nullptr, nullptr, instance, nullptr);
+        CW_USEDEFAULT, CW_USEDEFAULT, 612, 900, nullptr, nullptr, instance, nullptr);
     if (!hwnd) return 0;
 
     ShowWindow(hwnd, showCommand);
