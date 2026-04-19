@@ -32,11 +32,21 @@ jobs:
           if (-not (Test-Path $source)) {
             throw "Missing build output at $source"
           }
-          New-Item -ItemType Directory -Force -Path native-release | Out-Null
-          Copy-Item -Recurse -Force "$source\*" native-release\WingMultitrackRenamer.Windows
+          $bundle = 'native-release\Wing Multitrack Renamer'
+          $zip = 'native-release\Wing-Multitrack-Renamer-Windows-Native.zip'
+          New-Item -ItemType Directory -Force -Path $bundle | Out-Null
+          Copy-Item -Recurse -Force "$source\*" $bundle
+          $exe = Join-Path $bundle 'Wing Multitrack Renamer.exe'
+          if (-not (Test-Path $exe)) {
+            throw "Missing executable at $exe"
+          }
+          if (Test-Path $zip) {
+            Remove-Item -Force $zip
+          }
+          Compress-Archive -Path "$bundle\*" -DestinationPath $zip
 
       - name: Upload native Windows app
         uses: actions/upload-artifact@v4
         with:
           name: wing-multitrack-renamer-windows-native
-          path: native-release/WingMultitrackRenamer.Windows
+          path: native-release/Wing-Multitrack-Renamer-Windows-Native.zip
