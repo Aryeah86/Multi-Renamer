@@ -1,0 +1,42 @@
+name: Build Native Windows App
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - codex/windows
+    paths:
+      - 'windows-native/**'
+      - '.github/workflows/build-windows-native.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Build native Windows app
+        shell: pwsh
+        run: |
+          msbuild windows-native\WingMultitrackRenamer.Windows\WingMultitrackRenamer.Windows.csproj /restore /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Prepare artifact folder
+        shell: pwsh
+        run: |
+          $source = 'windows-native\WingMultitrackRenamer.Windows\bin\x64\Release\net48'
+          if (-not (Test-Path $source)) {
+            throw "Missing build output at $source"
+          }
+          New-Item -ItemType Directory -Force -Path native-release | Out-Null
+          Copy-Item -Recurse -Force "$source\*" native-release\WingMultitrackRenamer.Windows
+
+      - name: Upload native Windows app
+        uses: actions/upload-artifact@v4
+        with:
+          name: wing-multitrack-renamer-windows-native
+          path: native-release/WingMultitrackRenamer.Windows
