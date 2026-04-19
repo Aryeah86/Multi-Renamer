@@ -7,7 +7,7 @@ on:
       - main
       - codex/windows
     paths:
-      - 'windows-native/**'
+      - 'windows-win32/**'
       - '.github/workflows/build-windows-native.yml'
 
 permissions:
@@ -18,35 +18,33 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: microsoft/setup-msbuild@v2
+
+      - name: Configure native Windows app
+        shell: pwsh
+        run: |
+          cmake -S windows-win32 -B windows-win32/build -A x64
 
       - name: Build native Windows app
         shell: pwsh
         run: |
-          msbuild windows-native\WingMultitrackRenamer.Windows\WingMultitrackRenamer.Windows.csproj /restore /p:Configuration=Release /p:Platform=x64 /m
+          cmake --build windows-win32/build --config Release --parallel
 
-      - name: Prepare artifact folder
+      - name: Create installer and portable bundle
         shell: pwsh
         run: |
-          $source = 'windows-native\WingMultitrackRenamer.Windows\bin\x64\Release\net48'
-          if (-not (Test-Path $source)) {
-            throw "Missing build output at $source"
-          }
-          $bundle = 'native-release\Wing Multitrack Renamer'
-          $zip = 'native-release\Wing-Multitrack-Renamer-Windows-Native.zip'
-          New-Item -ItemType Directory -Force -Path $bundle | Out-Null
-          Copy-Item -Recurse -Force "$source\*" $bundle
-          $exe = Join-Path $bundle 'Wing Multitrack Renamer.exe'
+          cpack --config windows-win32/build/CPackConfig.cmake -C Release -G NSIS
+          $exe = 'windows-win32/build/Release/WingMultitrackRenamer.exe'
           if (-not (Test-Path $exe)) {
             throw "Missing executable at $exe"
           }
-          if (Test-Path $zip) {
-            Remove-Item -Force $zip
-          }
-          Compress-Archive -Path "$bundle\*" -DestinationPath $zip
+          New-Item -ItemType Directory -Force -Path native-release | Out-Null
+          Copy-Item -Force $exe 'native-release/WingMultitrackRenamer.exe'
+          Get-ChildItem windows-win32/build/*.exe | Copy-Item -Destination native-release -Force
 
-      - name: Upload native Windows app
+      - name: Upload native Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: wing-multitrack-renamer-windows-native
-          path: native-release/Wing-Multitrack-Renamer-Windows-Native.zip
+          path: |
+            native-release/WingMultitrackRenamer.exe
+            native-release/Wing-Multitrack-Renamer-Windows.exe
