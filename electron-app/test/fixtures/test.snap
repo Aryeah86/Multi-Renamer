@@ -1,0 +1,32 @@
+{
+  "ae_data": {
+    "io": {
+      "out": {
+        "CRD": {
+          "1": { "grp": "A", "in": 1 },
+          "2": { "grp": "A", "in": 2 },
+          "33": { "grp": "MAIN", "in": 1 },
+          "34": { "grp": "MAIN", "in": 2 },
+          "35": { "grp": "MAIN", "in": 3 },
+          "36": { "grp": "MAIN", "in": 4 },
+          "37": { "grp": "OFF", "in": 0 }
+        }
+      },
+      "in": {
+        "A": {
+          "1": { "name": "BD IN" },
+          "2": { "name": "BD OUT" }
+        }
+      }
+    },
+    "ch": {
+      "1": { "name": "Kick" },
+      "2": { "name": "Snare" }
+    },
+    "main": {
+      "1": { "name": "DRUMS", "busmono": false },
+      "2": { "name": "STRINGS", "busmono": false },
+      "3": { "name": "", "busmono": false }
+    }
+  }
+}
