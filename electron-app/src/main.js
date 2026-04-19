@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu } = require('electron');
 const path = require('path');
 const {
   buildPlan,
@@ -53,6 +53,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === 'win32') {
+    Menu.setApplicationMenu(null);
+  }
+
   createWindow();
 
   app.on('activate', () => {
