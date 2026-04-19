@@ -612,10 +612,14 @@ void HandleDroppedFiles(HDROP hDrop) {
     DragFinish(hDrop);
 }
 
-HWND CreateLabel(HWND parent, const wchar_t* text, int x, int y, int w, int h, HFONT font, COLORREF color = RGB(92,229,255)) {
+HWND CreateLabel(HWND parent, const wchar_t* text, int x, int y, int w, int h, HFONT font) {
     HWND hwnd = CreateWindowW(L"STATIC", text, WS_CHILD | WS_VISIBLE, x, y, w, h, parent, nullptr, nullptr, nullptr);
     SendMessageW(hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
     return hwnd;
+}
+
+HMENU MenuId(int id) {
+    return reinterpret_cast<HMENU>(static_cast<INT_PTR>(id));
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -631,32 +635,32 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             CreateLabel(hwnd, L"Wing Multitrack Renamer", 20, 18, 400, 32, titleFont);
 
             CreateLabel(hwnd, L"SLOT 1: SOURCE", 20, 64, 200, 18, font);
-            g_state.controls.folderEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 20, 86, 560, 28, hwnd, reinterpret_cast<HMENU>(IDC_FOLDER_EDIT), nullptr, nullptr);
-            CreateWindowW(L"BUTTON", L"Browse...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 590, 86, 130, 28, hwnd, reinterpret_cast<HMENU>(IDC_FOLDER_BUTTON), nullptr, nullptr);
+            g_state.controls.folderEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 20, 86, 560, 28, hwnd, MenuId(IDC_FOLDER_EDIT), nullptr, nullptr);
+            CreateWindowW(L"BUTTON", L"Browse...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 590, 86, 130, 28, hwnd, MenuId(IDC_FOLDER_BUTTON), nullptr, nullptr);
 
             CreateLabel(hwnd, L"SLOT 2: REFERENCE", 20, 128, 200, 18, font);
-            g_state.controls.snapEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 20, 150, 560, 28, hwnd, reinterpret_cast<HMENU>(IDC_SNAP_EDIT), nullptr, nullptr);
-            CreateWindowW(L"BUTTON", L"Browse...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 590, 150, 130, 28, hwnd, reinterpret_cast<HMENU>(IDC_SNAP_BUTTON), nullptr, nullptr);
+            g_state.controls.snapEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 20, 150, 560, 28, hwnd, MenuId(IDC_SNAP_EDIT), nullptr, nullptr);
+            CreateWindowW(L"BUTTON", L"Browse...", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 590, 150, 130, 28, hwnd, MenuId(IDC_SNAP_BUTTON), nullptr, nullptr);
 
-            g_state.controls.cardA = CreateWindowW(L"BUTTON", L"CARD A  1-32", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 20, 200, 150, 24, hwnd, reinterpret_cast<HMENU>(IDC_CARD_A), nullptr, nullptr);
-            g_state.controls.cardB = CreateWindowW(L"BUTTON", L"CARD B  33-64", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 190, 200, 170, 24, hwnd, reinterpret_cast<HMENU>(IDC_CARD_B), nullptr, nullptr);
-            g_state.controls.modeRename = CreateWindowW(L"BUTTON", L"RENAME", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 420, 200, 130, 24, hwnd, reinterpret_cast<HMENU>(IDC_MODE_RENAME), nullptr, nullptr);
-            g_state.controls.modeCopy = CreateWindowW(L"BUTTON", L"COPY", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 570, 200, 100, 24, hwnd, reinterpret_cast<HMENU>(IDC_MODE_COPY), nullptr, nullptr);
+            g_state.controls.cardA = CreateWindowW(L"BUTTON", L"CARD A  1-32", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 20, 200, 150, 24, hwnd, MenuId(IDC_CARD_A), nullptr, nullptr);
+            g_state.controls.cardB = CreateWindowW(L"BUTTON", L"CARD B  33-64", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 190, 200, 170, 24, hwnd, MenuId(IDC_CARD_B), nullptr, nullptr);
+            g_state.controls.modeRename = CreateWindowW(L"BUTTON", L"RENAME", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 420, 200, 130, 24, hwnd, MenuId(IDC_MODE_RENAME), nullptr, nullptr);
+            g_state.controls.modeCopy = CreateWindowW(L"BUTTON", L"COPY", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 570, 200, 100, 24, hwnd, MenuId(IDC_MODE_COPY), nullptr, nullptr);
 
-            g_state.controls.execute = CreateWindowW(L"BUTTON", L"Execute Rename", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 20, 240, 700, 38, hwnd, reinterpret_cast<HMENU>(IDC_EXECUTE), nullptr, nullptr);
+            g_state.controls.execute = CreateWindowW(L"BUTTON", L"Execute Rename", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 20, 240, 700, 38, hwnd, MenuId(IDC_EXECUTE), nullptr, nullptr);
 
             CreateLabel(hwnd, L"SYSTEM STATUS", 20, 298, 200, 18, font);
-            g_state.controls.status = CreateWindowW(L"STATIC", L"Ready", WS_CHILD | WS_VISIBLE, 20, 322, 700, 20, hwnd, reinterpret_cast<HMENU>(IDC_STATUS), nullptr, nullptr);
-            g_state.controls.progress = CreateWindowExW(0, PROGRESS_CLASSW, nullptr, WS_CHILD | WS_VISIBLE, 20, 350, 700, 16, hwnd, reinterpret_cast<HMENU>(IDC_PROGRESS), nullptr, nullptr);
+            g_state.controls.status = CreateWindowW(L"STATIC", L"Ready", WS_CHILD | WS_VISIBLE, 20, 322, 700, 20, hwnd, MenuId(IDC_STATUS), nullptr, nullptr);
+            g_state.controls.progress = CreateWindowExW(0, PROGRESS_CLASSW, nullptr, WS_CHILD | WS_VISIBLE, 20, 350, 700, 16, hwnd, MenuId(IDC_PROGRESS), nullptr, nullptr);
             CreateLabel(hwnd, L"ROWS", 20, 376, 60, 18, font);
-            g_state.controls.rowsMetric = CreateWindowW(L"STATIC", L"0", WS_CHILD | WS_VISIBLE, 20, 396, 50, 20, hwnd, reinterpret_cast<HMENU>(IDC_ROWS_METRIC), nullptr, nullptr);
+            g_state.controls.rowsMetric = CreateWindowW(L"STATIC", L"0", WS_CHILD | WS_VISIBLE, 20, 396, 50, 20, hwnd, MenuId(IDC_ROWS_METRIC), nullptr, nullptr);
             CreateLabel(hwnd, L"CARD", 120, 376, 60, 18, font);
-            g_state.controls.cardMetric = CreateWindowW(L"STATIC", L"A", WS_CHILD | WS_VISIBLE, 120, 396, 50, 20, hwnd, reinterpret_cast<HMENU>(IDC_CARD_METRIC), nullptr, nullptr);
+            g_state.controls.cardMetric = CreateWindowW(L"STATIC", L"A", WS_CHILD | WS_VISIBLE, 120, 396, 50, 20, hwnd, MenuId(IDC_CARD_METRIC), nullptr, nullptr);
             CreateLabel(hwnd, L"MODE", 220, 376, 60, 18, font);
-            g_state.controls.modeMetric = CreateWindowW(L"STATIC", L"RENAME", WS_CHILD | WS_VISIBLE, 220, 396, 120, 20, hwnd, reinterpret_cast<HMENU>(IDC_MODE_METRIC), nullptr, nullptr);
-            g_state.controls.output = CreateWindowW(L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFTNOWORDWRAP, 20, 424, 700, 20, hwnd, reinterpret_cast<HMENU>(IDC_OUTPUT), nullptr, nullptr);
+            g_state.controls.modeMetric = CreateWindowW(L"STATIC", L"RENAME", WS_CHILD | WS_VISIBLE, 220, 396, 120, 20, hwnd, MenuId(IDC_MODE_METRIC), nullptr, nullptr);
+            g_state.controls.output = CreateWindowW(L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFTNOWORDWRAP, 20, 424, 700, 20, hwnd, MenuId(IDC_OUTPUT), nullptr, nullptr);
 
-            g_state.controls.rows = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, nullptr, WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 20, 456, 700, 220, hwnd, reinterpret_cast<HMENU>(IDC_ROWS), nullptr, nullptr);
+            g_state.controls.rows = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, nullptr, WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL, 20, 456, 700, 220, hwnd, MenuId(IDC_ROWS), nullptr, nullptr);
             ListView_SetExtendedListViewStyle(g_state.controls.rows, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
             LVCOLUMNW col{};
             col.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;

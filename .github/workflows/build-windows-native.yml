@@ -39,12 +39,16 @@ jobs:
         run: |
           cpack --config windows-win32/build/CPackConfig.cmake -C Release -G NSIS
           $exe = 'windows-win32/build/Release/WingMultitrackRenamer.exe'
+          $installer = 'Wing-Multitrack-Renamer-Windows.exe'
           if (-not (Test-Path $exe)) {
             throw "Missing executable at $exe"
           }
+          if (-not (Test-Path $installer)) {
+            throw "Missing installer at $installer"
+          }
           New-Item -ItemType Directory -Force -Path native-release | Out-Null
           Copy-Item -Force $exe 'native-release/WingMultitrackRenamer.exe'
-          Get-ChildItem windows-win32/build/*.exe | Copy-Item -Destination native-release -Force
+          Copy-Item -Force $installer 'native-release/Wing-Multitrack-Renamer-Windows.exe'
 
       - name: Upload native Windows artifacts
         uses: actions/upload-artifact@v4

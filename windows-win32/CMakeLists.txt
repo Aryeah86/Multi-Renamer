@@ -20,7 +20,7 @@ if(MSVC)
   set_property(TARGET WingMultitrackRenamer PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 else()
   target_compile_options(WingMultitrackRenamer PRIVATE -Wall -Wextra -Wpedantic)
-  target_link_options(WingMultitrackRenamer PRIVATE -static -static-libgcc -static-libstdc++)
+  target_link_options(WingMultitrackRenamer PRIVATE -static -static-libgcc -static-libstdc++ -municode)
 endif()
 
 install(TARGETS WingMultitrackRenamer RUNTIME DESTINATION .)
