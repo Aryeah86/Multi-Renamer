@@ -1,0 +1,52 @@
+name: Build Native Windows App
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - codex/windows
+    paths:
+      - 'windows-win32/**'
+      - '.github/workflows/build-windows-native.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+
+      - name: Configure native Windows app
+        shell: pwsh
+        run: |
+          cmake -S windows-win32 -B windows-win32/build -A x64
+
+      - name: Build native Windows app
+        shell: pwsh
+        run: |
+          cmake --build windows-win32/build --config Release --parallel
+
+      - name: Create native Windows installer
+        shell: pwsh
+        run: |
+          cpack --config windows-win32/build/CPackConfig.cmake -C Release -G NSIS
+          $installer = 'Wing-Multitrack-Renamer-Windows.exe'
+          if (-not (Test-Path $installer)) {
+            throw "Missing installer at $installer"
+          }
+          New-Item -ItemType Directory -Force -Path native-release | Out-Null
+          Copy-Item -Force $installer 'native-release/Wing-Multitrack-Renamer-Windows.exe'
+
+      - name: Upload native Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wing-multitrack-renamer-windows-native
+          path: native-release/Wing-Multitrack-Renamer-Windows.exe
