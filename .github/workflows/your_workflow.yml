@@ -1,0 +1,5 @@
+# Add step to fetch total download count
+- name: Fetch Total Downloads
+  run: |
+    total_downloads=$(curl -s https://api.github.com/repos/{owner}/{repo}/downloads | jq '. | map(.download_count) | add')
+    echo "Total Downloads: $total_downloads"
